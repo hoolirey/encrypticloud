@@ -4,3 +4,9 @@ cpp_trust.json
 cpp_state.json
 __pycache__/
 *.pyc
+trust_state.json
+eu1_state.json
+cpp_trust.json
+cpp_state.json
+__pycache__/
+*.pyc
