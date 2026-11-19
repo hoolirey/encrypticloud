@@ -1,0 +1,4 @@
+{"client": "::1", "method": "GET", "path": "/", "prev": "08e6fd92a299db5a0773532f700c8fffb159b7442654a4581e5d4f2380f54e20a622ca6086c1f2dbca5b97fe7afbcc68", "result": "open_loopback", "signer": "-", "ts": 1794733682}
+{"client": "::1", "method": "GET", "path": "/", "prev": "bae1a7ddcf0e77617dfcb3b4c1376c960a182aee04b6afaecdc9be7b83caf290c9e14e0aff3e9e01c91a12693f3c8384", "result": "ok", "signer": "client1", "ts": 1794733691}
+{"client": "::1", "method": "GET", "path": "/", "prev": "848bb118109a740159242a3fb72b77397e3b6a0a496546b5a2ea2f1aac2d023f09d6f30d5fa8751f6a4b31e06a1ef1b7", "result": "missing_headers", "signer": null, "ts": 1794733783}
+{"client": "::1", "method": "GET", "path": "/", "prev": "190773a83e31ee0a131576494853758bbbad1306dfaf45810e4e177349d34e76d2cf61194bcb132753fbdffcfd88abb5", "result": "ok", "signer": "client1", "ts": 1794733784}

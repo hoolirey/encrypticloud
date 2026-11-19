@@ -1,0 +1,128 @@
+import asyncio
+import json
+import os
+import time
+from aiohttp import web
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
+from node_agent import NodeAgent
+from gibraltar import digest
+from omega_register import TrustRegistry, make_record, owner_sign
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+KEY_DIR = os.path.join(BASE_DIR, "keys")
+
+def load_priv(role: str) -> Ed25519PrivateKey:
+    with open(os.path.join(KEY_DIR, f"{role}.key")) as f:
+        return Ed25519PrivateKey.from_private_bytes(bytes.fromhex(f.read().strip()))
+
+def load_pub(role: str) -> Ed25519PublicKey:
+    with open(os.path.join(KEY_DIR, f"{role}.pub")) as f:
+        return Ed25519PublicKey.from_public_bytes(bytes.fromhex(f.read().strip()))
+
+class AsyncNodeServer:
+    def __init__(self, agent: NodeAgent, clock=time.time):
+        self.agent = agent
+        self.clock = clock
+        self._lock = asyncio.Lock()
+        self.app = web.Application(client_max_size=1024 * 256)
+        self.app.router.add_post("/rpc", self.handle_rpc)
+        self.app.router.add_get("/health", self.handle_health)
+
+    def _now(self) -> int:
+        return int(self.clock())
+
+    def _rpc_ok(self, req_id, result):
+        return web.json_response({"jsonrpc": "2.0", "id": req_id, "result": result})
+
+    def _rpc_err(self, req_id, code: int, message: str, status: int = 400):
+        return web.json_response(
+            {"jsonrpc": "2.0", "id": req_id, "error": {"code": code, "message": message}},
+            status=status,
+        )
+
+    async def handle_health(self, request: web.Request) -> web.Response:
+        return web.json_response({
+            "status": "ok",
+            "node_id": self.agent.node_id,
+            "frozen": self.agent.frozen,
+            "last_seq": self.agent.last_seq,
+        })
+
+    async def handle_rpc(self, request: web.Request) -> web.Response:
+        try:
+            payload = await request.json()
+        except json.JSONDecodeError:
+            return self._rpc_err(None, -32700, "Parse error")
+
+        if not isinstance(payload, dict) or payload.get("jsonrpc") != "2.0":
+            return self._rpc_err(payload.get("id") if isinstance(payload, dict) else None, -32600, "Invalid Request")
+
+        req_id = payload.get("id")
+        method = payload.get("method")
+        params = payload.get("params") or {}
+        now = self._now()
+
+        if not isinstance(params, dict):
+            return self._rpc_err(req_id, -32602, "Params must be a JSON object")
+
+        print(f"[{now}] RPC call: {method} (id={req_id})", flush=True)
+
+        async with self._lock:
+            try:
+                if method == "node.execute":
+                    res = await asyncio.to_thread(self.agent.handle_command, params["envelope"], now)
+                    return self._rpc_ok(req_id, res)
+                elif method == "node.freeze":
+                    detail = await asyncio.to_thread(
+                        self.agent.handle_freeze, params["scope"], int(params["ts"]), params["sig"], now
+                    )
+                    return self._rpc_ok(req_id, {"detail": detail, "frozen": self.agent.frozen})
+                elif method == "node.unfreeze":
+                    detail = await asyncio.to_thread(
+                        self.agent.handle_unfreeze,
+                        params["scope"],
+                        int(params["ts"]),
+                        params["sig"],
+                        int(params["ts2"]),
+                        params["sig2"],
+                        now,
+                    )
+                    return self._rpc_ok(req_id, {"detail": detail, "frozen": self.agent.frozen})
+                elif method == "node.heartbeat":
+                    hb = await asyncio.to_thread(self.agent.heartbeat, params.get("metrics", {}), now)
+                    return self._rpc_ok(req_id, hb)
+                elif method == "node.enroll_request":
+                    cert, pop_sig = await asyncio.to_thread(self.agent.enroll_request, params["region"], now)
+                    return self._rpc_ok(req_id, {"cert": cert, "pop_sig": pop_sig})
+                else:
+                    return self._rpc_err(req_id, -32601, f"Method not found: {method}", status=404)
+            except KeyError as e:
+                return self._rpc_err(req_id, -32602, f"Missing required parameter: {e}")
+            except (TypeError, ValueError) as e:
+                return self._rpc_err(req_id, -32602, f"Invalid parameter type: {e}")
+
+from trust_registry_new import TrustRegistry  # hardened registry
+
+async def main():
+    now = int(time.time())
+    fixed = {n: load_pub(n) for n in ["policy", "owner", "owner_confirm"]}
+    trust = TrustRegistry(load_pub("owner"), fixed)
+
+    rec = make_record(load_pub("omega"), now - 60)
+    trust.register(rec, owner_sign(load_priv("owner"), f"register|{digest(rec)}|{now}"), now)
+
+    state_file = os.path.join(BASE_DIR, "eu1_state.json")
+    agent = NodeAgent("eu1", load_priv("eu1"), trust, state_path=state_file)
+    server = AsyncNodeServer(agent)
+
+    runner = web.AppRunner(server.app)
+    await runner.setup()
+    await web.TCPSite(runner, "127.0.0.1", 8443).start()
+    print(f"[{now}] Zero-trust NodeAgent RPC listening on http://127.0.0", flush=True)
+    try:
+        await asyncio.Event().wait()
+    finally:
+        await runner.cleanup()
+
+if __name__ == "__main__":
+    asyncio.run(main())
