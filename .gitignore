@@ -1,5 +1,18 @@
+trust_state.json
+eu1_state.json
+cpp_trust.json
+cpp_state.json
 __pycache__/
 *.pyc
-dist/
-build/
-*.egg-info/
+trust_state.json
+eu1_state.json
+cpp_trust.json
+cpp_state.json
+__pycache__/
+*.pyc
+omega_reg.json
+
+# Local secrets and environment snapshots
+*.key
+captured_env.json
+*.env
