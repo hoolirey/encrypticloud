@@ -10,3 +10,4 @@ cpp_trust.json
 cpp_state.json
 __pycache__/
 *.pyc
+omega_reg.json
