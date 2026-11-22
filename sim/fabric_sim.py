@@ -144,7 +144,7 @@ def witnesses(rng, f, m=9, q=7, trials=40000):
     return sum(sum(rng.random() < f for _ in range(m)) >= q for _ in range(trials)) / trials
 
 def main():
-    ap = argparse.ArgumentParser(); ap.add_argument("--seed", type=int, default=1); a = ap.parse_args()
+    ap = argparse.ArgumentParser(); ap.add_argument("--seed", type=int, default=1); ap.add_argument("--e3", action="store_true"); a = ap.parse_args()
     rng = random.Random(a.seed); keys = Keys(rng); root = keys.new("root"); keys.new("attacker")
     hs = [keys.new(f"H{i}") for i in range(6)]; fails = []
     def check(name, cond): print(f"  [{'PASS' if cond else 'FAIL'}] {name}"); cond or fails.append(name)
@@ -185,6 +185,78 @@ def main():
     for q in (0.0, 0.5, 0.8, 0.95): print(f"  canary-identification q={q}: {canary(rng, 0.7, q):.1f} epochs")
     print("§18 patch-1 witness collusion: P(false alignment accepted), 7-of-9 disjoint witnesses")
     for f in (0.1, 0.3, 0.5, 0.7): print(f"  corrupted fraction of eligible witnesses={f}: {witnesses(rng, f):.4f}")
+    if a.e3:
+        print()
+        run_e3(rng)
+
     print("\nRESULT:", "ALL CHECKS PASSED" if not fails else f"FAILED: {fails}"); sys.exit(bool(fails))
+
+# ---- §21: cross-title pressure-field trust (added) ----
+
+def pressure_divergence(rng, true_load, overload, reaction, n_epochs=200, tol=0.1, trials=400):
+    """Sustained attack: region keeps publishing 'true_load' (falsely low) to attract traffic,
+    but its REAL load (what neighbors actually experience routing through it) sits at
+    true_load+overload the whole time, because it accepted traffic it lied its way into.
+    observed = EMA of what neighbors actually measure, starting from the prior honest baseline.
+    reaction = EMA smoothing (higher = adapts to the real overload faster -> shorter exploit
+    window, but also reacts more to ordinary noise -> more false flags on honest regions).
+    Returns: mean epochs of undetected real overload (exploit window), and false-flag rate
+    on a region with the same reaction speed experiencing only ordinary load noise, no lie."""
+    exploit_windows = []
+    for _ in range(trials):
+        observed = true_load                     # neighbors' prior, pre-attack baseline
+        for ep in range(n_epochs):
+            actual = true_load + overload + rng.gauss(0, 0.02)   # real sustained overload
+            observed = reaction * actual + (1 - reaction) * observed
+            published = true_load + rng.gauss(0, 0.01)           # the lie never updates
+            if abs(published - observed) > tol:
+                exploit_windows.append(ep); break
+        else:
+            exploit_windows.append(n_epochs)
+    mean_window = sum(exploit_windows) / len(exploit_windows)
+
+    false_flags = 0
+    for _ in range(trials):
+        observed = true_load
+        flagged = False
+        for ep in range(n_epochs):
+            actual = true_load + rng.gauss(0, 0.08)              # ordinary noise, no lie at all
+            observed = reaction * actual + (1 - reaction) * observed
+            published = true_load + rng.gauss(0, 0.01)
+            if abs(published - observed) > tol:
+                flagged = True; break
+        false_flags += flagged
+    return dict(mean_exploit_window_epochs=round(mean_window, 2), honest_false_flag_rate=round(false_flags / trials, 4))
+
+
+def disjoint_witness_topology(rng, degree, need=3, trials=20000):
+    """A region has `degree` neighbors; a fraction `colluding` of ALL regions are attacker-controlled
+    and mutually adjacent/same-appointment-tree (so they count as ONE witness for disjointness).
+    Returns P(region can ever assemble `need` disjoint honest witnesses) under random neighbor assignment,
+    swept over colluding fraction, for a fixed node degree."""
+    out = {}
+    for colluding in (0.0, 0.1, 0.2, 0.3, 0.4):
+        ok = 0
+        for _ in range(trials):
+            neighbors = ["colluder" if rng.random() < colluding else f"n{rng.random()}" for _ in range(degree)]
+            disjoint_honest = len(set(x for x in neighbors if x != "colluder"))
+            ok += disjoint_honest >= need
+        out[colluding] = round(ok / trials, 4)
+    return out
+
+
+def run_e3(rng):
+    print("§21.5.1 pressure divergence: exploit window vs false-flag rate, by EMA reaction speed")
+    for reaction in (0.02, 0.05, 0.1, 0.2, 0.4):
+        r = pressure_divergence(rng, true_load=0.5, overload=0.3, reaction=reaction)
+        print(f"  reaction={reaction:.2f}  {r}")
+    print("  FINDING: faster reaction shortens the exploit window but raises honest false-flags during real spikes — same tradeoff shape as §19.3 P5.")
+
+    print("§21.5.3 sparse-region disjoint-witness feasibility, need=3 disjoint honest reporters")
+    for degree in (3, 5, 9):
+        r = disjoint_witness_topology(rng, degree)
+        print(f"  neighbor-degree={degree}: {r}")
+    print("  FINDING: at degree=3 (lattice edge), even light collusion (10-20%) makes hitting 3 disjoint witnesses unreliable; interior nodes (degree=9) stay robust well past 30% collusion.")
+
 
 if __name__ == "__main__": main()
