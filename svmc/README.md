@@ -18,6 +18,7 @@ state machine; nothing here pretends to be real hardware.
 | `svmc.advisor` | AI configuration advisor: proposes configs only |
 | `svmc.policy` | Policy gate: limits + explicit approval before creation |
 | `svmc.node` | Node lifecycle composing all of the above |
+| `svmc.boxmatrix` | 4D boxed matrix: verifiable `w = x*y*z`, SI grid, geo overlay, pull recordance |
 
 ## Guarantees enforced in code
 
@@ -36,6 +37,43 @@ state machine; nothing here pretends to be real hardware.
 
 This package is a simulation for testing configuration policy and
 lifecycle semantics — treat it as a simulator, not a security boundary.
+
+## 4D BoxedMatrix
+
+`svmc.boxmatrix.BoxedMatrix4D` is a boxed 4D location grid: three axes span
+the SI-metric interior cubic dimensions, and the fourth coordinate is fully
+determined by the other three.
+
+```python
+from svmc.boxmatrix import BoxedMatrix4D
+
+box = BoxedMatrix4D(
+    length_m=5.0,
+    width_m=4.0,
+    height_m=3.0,
+    cell_size_m=1.0,
+    geo_anchor=(39.7392, -104.9903),
+)
+box.label(box.far_index())   # far corner depends on the cubic dimensions
+```
+
+- Coordinates are `(x, y, z, w)` with the invariant `w == x*y*z`, re-validated
+  on every `put`, `pull`, `clear_cell`, and `geo_bounds` call; a violation
+  raises `MatrixIndexError`, so a wrong fourth coordinate can never be stored.
+- Per-axis labels run `A0`-`Z9` (`axis_label`, wrapping every 260 slots);
+  the origin is `A0,A0,A0,A0` and `far_index()` / `far_label()` give the
+  far corner derived from the cubic dimensions. `extents` and
+  `cell_volume_m3()` expose the grid in SI metres.
+- With `geo_anchor=(lat, lon)`, `geo_bounds(index)` maps x to north, y to
+  east, and z to the vertical layer, returning the south-west floor and
+  north-east ceiling corners as `((lat, lon, bottom_m), (lat, lon, top_m))`.
+  The metre-to-degree conversion is an approximation and documented as such;
+  no I/O is performed.
+- Every `put`, `pull`, and `clear_cell` is appended to a hash-chained,
+  in-memory recordance (`sha256` over previous hash, operation, index, and
+  value). `verify()` re-walks the chain and raises `RecordanceError` on
+  tampering; `recordance()` returns a copy. Pass `recording=False` to
+  disable.
 
 ## Usage
 

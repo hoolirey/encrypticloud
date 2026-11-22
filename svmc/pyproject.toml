@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "svmc"
-version = "0.1.0"
+version = "0.2.0"
 description = "SVMC v0: pure-Python simulator of virtual nodes with a policy gate and append-only audit chain"
 requires-python = ">=3.10"
 dependencies = ["cryptography>=41"]
