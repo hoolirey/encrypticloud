@@ -28,7 +28,7 @@ from svmc.node import NodeConfiguration, NodeStatus, VirtualNode
 from svmc.policy import PendingRequest, PolicyDecision, PolicyGate, PolicyLimits, RequestStatus
 from svmc.snapshot import SnapshotManager
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "ApprovalRequiredError",
