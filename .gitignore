@@ -16,3 +16,8 @@ omega_reg.json
 *.key
 captured_env.json
 *.env
+
+# Local SQLite queues
+/data/
+*.sqlite3
+*.sqlite3-*
