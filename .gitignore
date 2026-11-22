@@ -16,3 +16,6 @@ omega_reg.json
 *.key
 captured_env.json
 *.env
+*.egg-info/
+dist/
+build/
