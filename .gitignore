@@ -11,3 +11,8 @@ cpp_state.json
 __pycache__/
 *.pyc
 omega_reg.json
+
+# Local secrets and environment snapshots
+*.key
+captured_env.json
+*.env
