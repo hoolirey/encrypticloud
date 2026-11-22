@@ -1,6 +1,0 @@
-Metadata-Version: 2.4
-Name: svmc
-Version: 0.1.0
-Summary: SVMC v0: pure-Python simulator of virtual nodes with a policy gate and append-only audit chain
-Requires-Python: >=3.10
-Requires-Dist: cryptography>=41
